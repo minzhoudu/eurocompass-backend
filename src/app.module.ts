@@ -1,4 +1,5 @@
-import { DatabaseModule } from '@database';
+import { DatabaseModule } from 'src/database';
+
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
