@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: eurocompass-postgres
+    environment:
+      POSTGRES_USER: eurocompass
+      POSTGRES_PASSWORD: 059ff8b8352a4709e426bea5c8b710cb
+      POSTGRES_DB: eurocompass
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
