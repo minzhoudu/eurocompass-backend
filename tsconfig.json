@@ -13,12 +13,14 @@
     "incremental": true,
     "skipLibCheck": true,
     "strict": true,
+    "strictPropertyInitialization": false,
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
     "paths": {
       "@database": ["src/database"],
-      "@shared": ["src/shared"]
+      "@shared": ["src/shared"],
+      "@modules": ["src/modules"]
     }
   }
 }
