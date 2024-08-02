@@ -11,11 +11,13 @@ import {
   UseFilters,
   UseInterceptors,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { TypeormExceptionFilter } from '@shared';
 
 import { CreateUserDto, UpdateUserDto } from './dtos';
 import { UsersService } from './users.service';
 
+@ApiTags('Users')
 @UseFilters(new TypeormExceptionFilter())
 @UseInterceptors(ClassSerializerInterceptor)
 @Controller('users')
