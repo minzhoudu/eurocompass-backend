@@ -8,6 +8,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import { UserRole } from '@shared';
+
 import { Address } from './address.entity';
 
 @Entity()
@@ -15,18 +17,28 @@ export class User {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'first_name' })
+  @Column({ name: 'first_name', nullable: false })
   firstName: string;
 
-  @Column({ name: 'last_name' })
+  @Column({ name: 'last_name', nullable: false })
   lastName: string;
 
   @Column({ unique: true, nullable: false })
   email: string;
 
+  @Column({ name: 'phone_number', nullable: false })
+  phone: string;
+
   @Exclude()
-  @Column()
+  @Column({ nullable: false })
   password: string;
+
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    default: UserRole.USER,
+  })
+  role: UserRole;
 
   @OneToMany(() => Address, (address) => address.user, {
     cascade: true,
