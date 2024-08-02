@@ -1,17 +1,9 @@
-import { INestApplication, Logger } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
+import { getDocumentBuilder } from '@shared';
 
 import { AppModule } from './app.module';
-
-const getDocumentBuilder = (app: INestApplication<any>) => {
-  const config = new DocumentBuilder()
-    .setTitle('Eurocompass API')
-    .setVersion('1.0')
-    .build();
-
-  return SwaggerModule.createDocument(app, config);
-};
 
 async function bootstrap() {
   const logger = new Logger('bootstrap');
@@ -27,8 +19,15 @@ async function bootstrap() {
     SwaggerModule.setup('swagger', app, getDocumentBuilder(app));
   }
 
-  await app.listen(3000);
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }),
+  );
 
-  logger.log(`Application is running on: http://localhost:3000`);
+  await app.listen(3001);
+
+  logger.debug(`Application is running on: http://localhost:3001/swagger`);
 }
 bootstrap();
