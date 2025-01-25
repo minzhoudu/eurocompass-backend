@@ -22,6 +22,7 @@ export class AuthController {
 
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
+      sameSite: 'none',
     });
 
     return res.json({ message: 'Uspesno ste se ulogovali' });
