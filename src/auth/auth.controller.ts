@@ -31,7 +31,11 @@ export class AuthController {
 
   @Post('logout')
   logout(@Res() res: Response) {
-    res.clearCookie('accessToken');
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+    });
 
     return res.json({ message: 'Uspesno ste se izlogovali' });
   }
