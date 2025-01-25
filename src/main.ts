@@ -12,7 +12,7 @@ async function bootstrap() {
         'http://localhost:5173',
         'https://eurocompass.site/',
       ];
-      const netlifyPattern = /\.eurocompass\.netlify\.app$/;
+      const netlifyPattern = /eurocompass\.netlify\.app$/;
 
       if (
         !origin ||
