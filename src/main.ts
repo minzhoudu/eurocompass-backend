@@ -10,7 +10,7 @@ async function bootstrap() {
     origin: (origin, callback) => {
       const allowedOrigins = [
         'http://localhost:5173',
-        'https://eurocompass.site/',
+        'https://eurocompass.site',
       ];
       const netlifyPattern = /eurocompass\.netlify\.app$/;
 
