@@ -15,4 +15,16 @@ export class UpdateInformationDto {
   @IsOptional()
   @IsArray()
   importantInfo?: string[];
+
+  @IsOptional()
+  @IsArray()
+  startingTimesKrusevac?: string[];
+
+  @IsOptional()
+  @IsArray()
+  startingTimesBeograd?: string[];
+
+  @IsOptional()
+  @IsArray()
+  saturdayBeograd?: string[];
 }
