@@ -18,5 +18,5 @@ export class User {
   password: string;
 
   @Column({ name: 'last_login' })
-  lastLogin: Date;
+  lastLogin: string;
 }

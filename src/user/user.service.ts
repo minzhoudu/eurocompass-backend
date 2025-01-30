@@ -46,7 +46,7 @@ export class UserService {
   }
 
   async updateLastLogin(user: User) {
-    user.lastLogin = new Date();
+    user.lastLogin = new Date().toLocaleString('sr-RS');
     await this.userRepository.save(user);
   }
 }
