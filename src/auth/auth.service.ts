@@ -32,6 +32,10 @@ export class AuthService {
       lastName: user.lastName,
     };
 
-    return await this.jwtService.signAsync(payload);
+    const jwt = await this.jwtService.signAsync(payload);
+
+    await this.userService.updateLastLogin(user);
+
+    return jwt;
   }
 }

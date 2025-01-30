@@ -44,4 +44,9 @@ export class UserService {
   async validatePassword(password: string, hashedPassword: string) {
     return await bcrypt.compare(password, hashedPassword);
   }
+
+  async updateLastLogin(user: User) {
+    user.lastLogin = new Date();
+    await this.userRepository.save(user);
+  }
 }
