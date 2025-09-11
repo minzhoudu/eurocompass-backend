@@ -11,6 +11,9 @@ export class Information {
   @Column({ name: 'roundtrip_price' })
   roundtripPrice: string;
 
+  @Column({ name: 'student_price' })
+  studentPrice: string;
+
   @Column({ name: 'important_info', type: 'varchar', array: true })
   importantInfo: string[];
 

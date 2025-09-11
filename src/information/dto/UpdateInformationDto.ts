@@ -13,6 +13,10 @@ export class UpdateInformationDto {
   roundtripPrice?: string;
 
   @IsOptional()
+  @IsString()
+  studentPrice?: string;
+
+  @IsOptional()
   @IsArray()
   importantInfo?: string[];
 
