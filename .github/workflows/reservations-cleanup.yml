@@ -1,0 +1,16 @@
+name: Reservations retention cleanup
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call cleanup endpoint
+        run: |
+          curl -fsS -X POST "${{ vars.BACKEND_URL }}/reservations/cleanup" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            --max-time 120 --retry 2 --retry-delay 15
