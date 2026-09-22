@@ -11,6 +11,7 @@ type PeriodStats = {
 
 export type ReservationStats = {
   today: PeriodStats;
+  week: PeriodStats;
   month: PeriodStats;
   year: PeriodStats;
 };
@@ -44,16 +45,23 @@ export class ReservationsService {
     // Bucketed in Europe/Belgrade local time, not UTC, so "today" lines up
     // with the actual business day rather than rolling over at 1-2am local.
     type StatsRow = {
-      period: 'today' | 'month' | 'year';
+      period: 'today' | 'week' | 'month' | 'year';
       count: string;
       seats: string | null;
     };
 
+    // date_trunc('week', ...) is ISO 8601 (Monday-start), which matches the
+    // Serbian convention - consistent with the other buckets being
+    // calendar-aligned rather than rolling windows.
     const rows = (await this.reservationRepository.query(
       `
         select 'today' as period, count(*) as count, coalesce(sum(number_of_tickets), 0) as seats
         from reservations
         where date_trunc('day', created_at at time zone $1) = date_trunc('day', now() at time zone $1)
+        union all
+        select 'week' as period, count(*) as count, coalesce(sum(number_of_tickets), 0) as seats
+        from reservations
+        where date_trunc('week', created_at at time zone $1) = date_trunc('week', now() at time zone $1)
         union all
         select 'month' as period, count(*) as count, coalesce(sum(number_of_tickets), 0) as seats
         from reservations
