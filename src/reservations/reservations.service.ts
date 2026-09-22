@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { CreateReservationDto } from './dto/CreateReservationDto';
@@ -20,6 +20,8 @@ const TIMEZONE = 'Europe/Belgrade';
 
 @Injectable()
 export class ReservationsService {
+  private readonly logger = new Logger(ReservationsService.name);
+
   constructor(
     @InjectRepository(Reservation)
     private reservationRepository: Repository<Reservation>,
@@ -85,7 +87,12 @@ export class ReservationsService {
     const result = await this.reservationRepository.delete({
       createdAt: LessThan(cutoff),
     });
+    const deletedCount = result.affected ?? 0;
 
-    return { deletedCount: result.affected ?? 0 };
+    this.logger.log(
+      `Reservation cleanup ran: deleted ${deletedCount} reservation(s) created before ${cutoff.toISOString()}`,
+    );
+
+    return { deletedCount };
   }
 }
