@@ -16,6 +16,13 @@ export type ReservationStats = {
   year: PeriodStats;
 };
 
+export type PaginatedReservations = {
+  items: (Reservation & { isDuplicateTrip: boolean })[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 const RETENTION_YEARS = 1;
 const TIMEZONE = 'Europe/Belgrade';
 
@@ -35,10 +42,94 @@ export class ReservationsService {
     });
   }
 
-  getReservations() {
-    return this.reservationRepository.find({
-      order: { createdAt: 'DESC' },
-    });
+  async getReservations(
+    page: number,
+    pageSize: number,
+    search: string | null,
+  ): Promise<PaginatedReservations> {
+    // The duplicate-trip flag is computed over the ENTIRE table (not just the
+    // current page/search results), so it stays correct even when a matching
+    // pair of bookings lands on two different pages.
+    type ReservationRow = {
+      id: number;
+      full_name: string;
+      email: string;
+      phone: string;
+      starting_location: string;
+      travel_date: string;
+      travel_time: string;
+      number_of_tickets: number;
+      note: string | null;
+      created_at: Date;
+      is_duplicate_trip: boolean;
+      total_count: string;
+    };
+
+    const offset = (page - 1) * pageSize;
+
+    const rows = (await this.reservationRepository.query(
+      `
+        with trip_groups as (
+          select
+            lower(trim(email)) as norm_email,
+            travel_date,
+            travel_time,
+            lower(trim(starting_location)) as norm_location,
+            count(*) as trip_count
+          from reservations
+          group by 1, 2, 3, 4
+        ),
+        enriched as (
+          select
+            r.id,
+            r.full_name,
+            r.email,
+            r.phone,
+            r.starting_location,
+            -- Cast explicitly: the pg driver parses a bare "date" column into
+            -- a JS Date at local midnight, which toISOString() then shifts
+            -- across a day boundary (Europe/Belgrade is ahead of UTC).
+            -- TypeORM's find() avoided this via its own date<->string
+            -- transformer, which raw query() bypasses entirely.
+            r.travel_date::text as travel_date,
+            r.travel_time,
+            r.number_of_tickets,
+            r.note,
+            r.created_at,
+            (tg.trip_count > 1) as is_duplicate_trip
+          from reservations r
+          join trip_groups tg
+            on tg.norm_email = lower(trim(r.email))
+            and tg.travel_date = r.travel_date
+            and tg.travel_time = r.travel_time
+            and tg.norm_location = lower(trim(r.starting_location))
+        )
+        select *, count(*) over () as total_count
+        from enriched
+        where ($1::text is null or full_name ilike '%' || $1 || '%' or email ilike '%' || $1 || '%')
+        order by created_at desc
+        limit $2 offset $3
+      `,
+      [search, pageSize, offset],
+    )) as ReservationRow[];
+
+    const items = rows.map((row) => ({
+      id: row.id,
+      fullName: row.full_name,
+      email: row.email,
+      phone: row.phone,
+      startingLocation: row.starting_location,
+      travelDate: row.travel_date,
+      travelTime: row.travel_time,
+      numberOfTickets: row.number_of_tickets,
+      note: row.note,
+      createdAt: row.created_at,
+      isDuplicateTrip: row.is_duplicate_trip,
+    })) as (Reservation & { isDuplicateTrip: boolean })[];
+
+    const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
+
+    return { items, total, page, pageSize };
   }
 
   async getStats(): Promise<ReservationStats> {
