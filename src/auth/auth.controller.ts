@@ -26,7 +26,7 @@ export class AuthController {
       sameSite: 'none',
     });
 
-    return res.json({ message: 'Uspesno ste se ulogovali' });
+    return res.json({ message: 'Uspesno ste se ulogovali', accessToken });
   }
 
   @Post('logout')
