@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -31,7 +32,7 @@ const toSummary = (user: User) => ({
   email: user.email,
   role: user.role,
   isActive: user.isActive,
-  lastLogin: user.lastLogin,
+  lastActiveAt: user.lastActiveAt ?? null,
 });
 
 const fullName = (user: Pick<User, 'firstName' | 'lastName'>) =>
@@ -39,15 +40,40 @@ const fullName = (user: Pick<User, 'firstName' | 'lastName'>) =>
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
+
   constructor(
     @InjectRepository(User) private readonly userRepository: Repository<User>,
     private readonly auditService: AuditService,
   ) {}
 
   async getUsers() {
-    const users = await this.userRepository.find({ order: { id: 'ASC' } });
+    const users = await this.userRepository
+      .createQueryBuilder('user')
+      .addSelect('user.lastActiveAt')
+      .orderBy('user.id', 'ASC')
+      .getMany();
 
     return users.map(toSummary);
+  }
+
+  // The admin panel reports real use (see POST /auth/activity). At most one
+  // write every 30 seconds per account, however often it is called. Never
+  // throws: this is bookkeeping and must not break the request.
+  async touchActive(id: number) {
+    try {
+      await this.userRepository
+        .createQueryBuilder()
+        .update(User)
+        .set({ lastActiveAt: () => 'now()' })
+        .where('id = :id', { id })
+        .andWhere(
+          "(last_active_at is null or last_active_at < now() - interval '30 seconds')",
+        )
+        .execute();
+    } catch (error) {
+      this.logger.error(`Could not record activity for user ${id}`, error);
+    }
   }
 
   async getUserByEmail(email: string) {
