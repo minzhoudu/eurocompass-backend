@@ -6,6 +6,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from 'src/auth/guards/auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/auth/roles.decorator';
 import { isRealDate } from 'src/common/date.util';
 import { AuditService } from './audit.service';
 import { AuditLogQueryDto } from './dto/AuditLogQueryDto';
@@ -17,7 +19,8 @@ const MAX_PAGE_SIZE = 100;
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('owner')
   @Get()
   async getEntries(@Query() params: AuditLogQueryDto) {
     const { from, to } = params;
