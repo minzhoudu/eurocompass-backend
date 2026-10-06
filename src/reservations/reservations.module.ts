@@ -1,12 +1,17 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BlockedDatesModule } from 'src/blocked-dates/blocked-dates.module';
 import { UserModule } from 'src/user/user.module';
 import { Reservation } from './models/Reservation';
 import { ReservationsController } from './reservations.controller';
 import { ReservationsService } from './reservations.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Reservation]), UserModule],
+  imports: [
+    TypeOrmModule.forFeature([Reservation]),
+    UserModule,
+    BlockedDatesModule,
+  ],
   controllers: [ReservationsController],
   providers: [ReservationsService],
 })

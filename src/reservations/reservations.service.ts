@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
+import { BlockedDatesService } from 'src/blocked-dates/blocked-dates.service';
 import { CreateReservationDto } from './dto/CreateReservationDto';
 import { ReservationSort } from './dto/ReservationFiltersDto';
 import { Reservation } from './models/Reservation';
@@ -57,9 +58,16 @@ export class ReservationsService {
   constructor(
     @InjectRepository(Reservation)
     private reservationRepository: Repository<Reservation>,
+    private blockedDatesService: BlockedDatesService,
   ) {}
 
-  createReservation(dto: CreateReservationDto) {
+  async createReservation(dto: CreateReservationDto) {
+    await this.blockedDatesService.assertNotBlocked(
+      dto.travelDate,
+      dto.startingLocation,
+      dto.travelTime,
+    );
+
     return this.reservationRepository.save({
       ...dto,
       note: dto.note ?? null,
