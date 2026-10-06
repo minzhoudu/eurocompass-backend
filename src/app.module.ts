@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
+import { BlockedDatesModule } from './blocked-dates/blocked-dates.module';
 import { DatabaseModule } from './database/database.module';
 import { InformationModule } from './information/information.module';
 import { NoticesModule } from './notices/notices.module';
@@ -17,6 +18,7 @@ import { UserModule } from './user/user.module';
     AuthModule,
     InformationModule,
     NoticesModule,
+    BlockedDatesModule,
     ReservationsModule,
   ],
   controllers: [AppController],
