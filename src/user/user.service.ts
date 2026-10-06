@@ -48,7 +48,7 @@ export class UserService {
       entityType: 'user',
       entityId: (identifiers[0] as { id?: number } | undefined)?.id,
       summary: `Dodat admin nalog: ${firstName} ${lastName} (${email})`,
-      details: { email, firstName, lastName },
+      details: { snapshot: { firstName, lastName, email } },
     });
   }
 
