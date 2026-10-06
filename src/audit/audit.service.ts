@@ -104,6 +104,14 @@ export class AuditService {
     return rows;
   }
 
+  getEntry(id: number) {
+    return this.auditRepository.findOne({ where: { id } });
+  }
+
+  async deleteEntry(id: number) {
+    await this.auditRepository.delete({ id });
+  }
+
   // Owner-initiated clean-up. `olderThanDays: null` removes everything.
   async deleteEntries(olderThanDays: number | null) {
     const query = this.auditRepository.createQueryBuilder().delete();

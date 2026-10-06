@@ -1,14 +1,17 @@
 import {
   BadRequestException,
+  NotFoundException,
   Controller,
   Delete,
   Get,
+  Param,
+  ParseIntPipe,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { CurrentActor } from 'src/auth/actor.decorator';
 import { Actor } from 'src/audit/audit.types';
-import { formatEntryCount } from './audit.util';
+import { clip, formatEntryCount } from './audit.util';
 import { AuthGuard } from 'src/auth/guards/auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/roles.decorator';
@@ -107,5 +110,36 @@ export class AuditController {
     }
 
     return { deletedCount };
+  }
+
+  // Removes one entry. What was removed (its text, who did it and when) is
+  // copied into a new entry, so deleting never leaves no trace.
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('owner')
+  @Delete(':id')
+  async deleteEntry(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentActor() actor: Actor,
+  ) {
+    const entry = await this.auditService.getEntry(id);
+
+    if (!entry) throw new NotFoundException('Zapis nije pronađen');
+
+    await this.auditService.deleteEntry(id);
+
+    const entryTime = entry.createdAt.toLocaleString('sr-RS', {
+      timeZone: 'Europe/Belgrade',
+    });
+    const entryActor = entry.actorName || entry.actorEmail || 'sistem';
+
+    await this.auditService.record(actor, {
+      action: 'audit.delete_entry',
+      entityType: 'audit',
+      entityId: id,
+      summary: `Obrisan zapis iz istorije izmena: „${clip(entry.summary, 120)}“ (${entryTime}, ${entryActor})`,
+      details: {
+        snapshot: { entrySummary: entry.summary, entryActor, entryTime },
+      },
+    });
   }
 }
