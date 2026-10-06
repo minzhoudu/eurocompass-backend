@@ -104,6 +104,29 @@ export class AuditService {
     return rows;
   }
 
+  getEntry(id: number) {
+    return this.auditRepository.findOne({ where: { id } });
+  }
+
+  async deleteEntry(id: number) {
+    await this.auditRepository.delete({ id });
+  }
+
+  // Owner-initiated clean-up. `olderThanDays: null` removes everything.
+  async deleteEntries(olderThanDays: number | null) {
+    const query = this.auditRepository.createQueryBuilder().delete();
+
+    if (olderThanDays !== null) {
+      const cutoff = new Date(Date.now() - olderThanDays * 86_400_000);
+
+      query.where('created_at < :cutoff', { cutoff });
+    }
+
+    const result = await query.execute();
+
+    return result.affected ?? 0;
+  }
+
   // Entries are only kept for a year, like the reservations they describe.
   async deleteExpired() {
     const cutoff = new Date();
