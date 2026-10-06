@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { CreateReservationDto } from './dto/CreateReservationDto';
+import { ReservationSort } from './dto/ReservationFiltersDto';
 import { Reservation } from './models/Reservation';
 
 type PeriodStats = {
@@ -21,6 +22,23 @@ export type PaginatedReservations = {
   total: number;
   page: number;
   pageSize: number;
+};
+
+export type ReservationFilters = {
+  travelFrom: string | null;
+  travelTo: string | null;
+  location: string | null;
+  time: string | null;
+  duplicatesOnly: boolean;
+  sort: ReservationSort;
+};
+
+// Chosen from a fixed whitelist (never user text), so it is safe to splice into
+// the query. `id` keeps paging stable when the sort key ties.
+const ORDER_BY: Record<ReservationSort, string> = {
+  newest: 'created_at desc, id desc',
+  travel_asc: 'travel_date asc, travel_time asc, id asc',
+  travel_desc: 'travel_date desc, travel_time desc, id desc',
 };
 
 const RETENTION_YEARS = 1;
@@ -46,6 +64,7 @@ export class ReservationsService {
     page: number,
     pageSize: number,
     search: string | null,
+    filters: ReservationFilters,
   ): Promise<PaginatedReservations> {
     // The duplicate-trip flag is computed over the ENTIRE table (not just the
     // current page/search results), so it stays correct even when a matching
@@ -107,10 +126,26 @@ export class ReservationsService {
         select *, count(*) over () as total_count
         from enriched
         where ($1::text is null or full_name ilike '%' || $1 || '%' or email ilike '%' || $1 || '%')
-        order by created_at desc
+          and ($4::date is null or travel_date::date >= $4::date)
+          and ($5::date is null or travel_date::date <= $5::date)
+          and ($6::text is null
+            or starting_location = $6
+            or starts_with(starting_location, $6 || ' - '))
+          and ($7::text is null or travel_time = $7)
+          and (not $8::boolean or is_duplicate_trip)
+        order by ${ORDER_BY[filters.sort]}
         limit $2 offset $3
       `,
-      [search, pageSize, offset],
+      [
+        search,
+        pageSize,
+        offset,
+        filters.travelFrom,
+        filters.travelTo,
+        filters.location,
+        filters.time,
+        filters.duplicatesOnly,
+      ],
     )) as ReservationRow[];
 
     const items = rows.map((row) => ({

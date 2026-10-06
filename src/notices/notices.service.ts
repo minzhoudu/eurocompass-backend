@@ -5,18 +5,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { isRealDate } from 'src/common/date.util';
 import { SaveNoticeDto } from './dto/SaveNoticeDto';
 import { Notice } from './models/Notice';
 
 const TIMEZONE = 'Europe/Belgrade';
-
-const isRealDate = (date: string) => {
-  const parsed = new Date(`${date}T00:00:00Z`);
-
-  return (
-    !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(date)
-  );
-};
 
 @Injectable()
 export class NoticesService {
