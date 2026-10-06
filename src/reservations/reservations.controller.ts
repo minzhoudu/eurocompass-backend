@@ -12,6 +12,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { CurrentActor } from 'src/auth/actor.decorator';
+import { Actor } from 'src/audit/audit.types';
 import { AuthGuard } from 'src/auth/guards/auth.guard';
 import { isRealDate } from 'src/common/date.util';
 import { CreateReservationDto } from './dto/CreateReservationDto';
@@ -93,12 +95,14 @@ export class ReservationsController {
   @Get('export')
   async exportReservations(
     @Res({ passthrough: true }) res: Response,
+    @CurrentActor() actor: Actor,
     @Query('search') searchParam?: string,
     @Query() filterParams: ReservationFiltersDto = {},
   ) {
     const csv = await this.reservationsService.exportReservationsCsv(
       searchParam?.trim() || null,
       parseFilters(filterParams),
+      actor,
     );
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -157,8 +161,11 @@ export class ReservationsController {
 
   @UseGuards(AuthGuard)
   @Delete(':id')
-  deleteReservation(@Param('id', ParseIntPipe) id: number) {
-    return this.reservationsService.deleteReservation(id);
+  deleteReservation(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.reservationsService.deleteReservation(id, actor);
   }
 
   @UseGuards(CronGuard)

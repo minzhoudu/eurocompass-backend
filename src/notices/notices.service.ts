@@ -5,17 +5,28 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Actor } from 'src/audit/audit.types';
+import { AuditService } from 'src/audit/audit.service';
+import { clip, diffFields } from 'src/audit/audit.util';
 import { isRealDate } from 'src/common/date.util';
 import { SaveNoticeDto } from './dto/SaveNoticeDto';
 import { Notice } from './models/Notice';
 
 const TIMEZONE = 'Europe/Belgrade';
+const NOTICE_FIELDS = [
+  'message',
+  'severity',
+  'startsOn',
+  'endsOn',
+  'isEnabled',
+] as const;
 
 @Injectable()
 export class NoticesService {
   constructor(
     @InjectRepository(Notice)
     private noticeRepository: Repository<Notice>,
+    private auditService: AuditService,
   ) {}
 
   // What the public site shows right now: enabled, and today (Belgrade time)
@@ -46,23 +57,60 @@ export class NoticesService {
     return this.noticeRepository.find({ order: { createdAt: 'DESC' } });
   }
 
-  createNotice(dto: SaveNoticeDto) {
-    return this.noticeRepository.save(this.toEntityValues(dto));
+  async createNotice(dto: SaveNoticeDto, actor: Actor) {
+    const notice = await this.noticeRepository.save(this.toEntityValues(dto));
+
+    await this.auditService.record(actor, {
+      action: 'notice.create',
+      entityType: 'notice',
+      entityId: notice.id,
+      summary: `Dodato obaveštenje „${clip(notice.message)}“`,
+      details: { snapshot: this.snapshot(notice) },
+    });
+
+    return notice;
   }
 
-  async updateNotice(id: number, dto: SaveNoticeDto) {
+  async updateNotice(id: number, dto: SaveNoticeDto, actor: Actor) {
     const notice = await this.noticeRepository.findOne({ where: { id } });
 
     if (!notice) throw new NotFoundException('Obaveštenje nije pronađeno');
 
-    return this.noticeRepository.save({
-      ...notice,
-      ...this.toEntityValues(dto),
-    });
+    const values = this.toEntityValues(dto);
+    const changes = diffFields(notice, values, NOTICE_FIELDS);
+    const updated = await this.noticeRepository.save({ ...notice, ...values });
+
+    if (Object.keys(changes).length > 0) {
+      await this.auditService.record(actor, {
+        action: 'notice.update',
+        entityType: 'notice',
+        entityId: id,
+        summary: `Izmenjeno obaveštenje „${clip(updated.message)}“`,
+        details: { changes },
+      });
+    }
+
+    return updated;
   }
 
-  async deleteNotice(id: number) {
+  async deleteNotice(id: number, actor: Actor) {
+    const notice = await this.noticeRepository.findOne({ where: { id } });
+
     await this.noticeRepository.delete({ id });
+
+    if (notice) {
+      await this.auditService.record(actor, {
+        action: 'notice.delete',
+        entityType: 'notice',
+        entityId: id,
+        summary: `Obrisano obaveštenje „${clip(notice.message)}“`,
+        details: { snapshot: this.snapshot(notice) },
+      });
+    }
+  }
+
+  private snapshot(notice: Notice) {
+    return Object.fromEntries(NOTICE_FIELDS.map((f) => [f, notice[f]]));
   }
 
   private toEntityValues(dto: SaveNoticeDto) {

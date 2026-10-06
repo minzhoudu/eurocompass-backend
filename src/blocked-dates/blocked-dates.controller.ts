@@ -9,6 +9,8 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
+import { CurrentActor } from 'src/auth/actor.decorator';
+import { Actor } from 'src/audit/audit.types';
 import { AuthGuard } from 'src/auth/guards/auth.guard';
 import { BlockedDatesService } from './blocked-dates.service';
 import { SaveBlockedDateDto } from './dto/SaveBlockedDateDto';
@@ -31,8 +33,11 @@ export class BlockedDatesController {
 
   @UseGuards(AuthGuard)
   @Post()
-  createBlockedDate(@Body() dto: SaveBlockedDateDto) {
-    return this.blockedDatesService.createBlockedDate(dto);
+  createBlockedDate(
+    @Body() dto: SaveBlockedDateDto,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.blockedDatesService.createBlockedDate(dto, actor);
   }
 
   @UseGuards(AuthGuard)
@@ -40,13 +45,17 @@ export class BlockedDatesController {
   updateBlockedDate(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SaveBlockedDateDto,
+    @CurrentActor() actor: Actor,
   ) {
-    return this.blockedDatesService.updateBlockedDate(id, dto);
+    return this.blockedDatesService.updateBlockedDate(id, dto, actor);
   }
 
   @UseGuards(AuthGuard)
   @Delete(':id')
-  deleteBlockedDate(@Param('id', ParseIntPipe) id: number) {
-    return this.blockedDatesService.deleteBlockedDate(id);
+  deleteBlockedDate(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.blockedDatesService.deleteBlockedDate(id, actor);
   }
 }
