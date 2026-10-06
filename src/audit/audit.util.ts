@@ -28,6 +28,15 @@ export const formatDay = (day: string) => {
   return `${date}.${month}.${year}`;
 };
 
+// "1 zapis", "3 zapisa", "11 zapisa", "21 zapis".
+export const formatEntryCount = (count: number) => {
+  const lastDigit = count % 10;
+  const lastTwo = count % 100;
+  const isOne = lastDigit === 1 && lastTwo !== 11;
+
+  return `${count} ${isOne ? 'zapis' : 'zapisa'}`;
+};
+
 // Free text goes into a one-line summary; keep it short.
 export const clip = (text: string | null | undefined, max = 80) => {
   const oneLine = (text ?? '').replace(/\s+/g, ' ').trim();
