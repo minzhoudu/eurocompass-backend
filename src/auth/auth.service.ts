@@ -48,6 +48,7 @@ export class AuthService {
     const jwt = await this.jwtService.signAsync(payload);
 
     await this.userService.updateLastLogin(user);
+    await this.userService.touchActive(user.id);
 
     await this.auditService.record(
       {
