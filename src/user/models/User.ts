@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { UserRole } from '../user-role';
 
 @Entity()
 export class User {
@@ -19,4 +20,14 @@ export class User {
 
   @Column({ name: 'last_login' })
   lastLogin: string;
+
+  @Column({ type: 'text', default: 'admin' })
+  role: UserRole;
+
+  @Column({ name: 'is_active', default: true })
+  isActive: boolean;
+
+  // Login tokens issued before this moment are rejected.
+  @Column({ name: 'tokens_valid_after', type: 'timestamptz', nullable: true })
+  tokensValidAfter: Date | null;
 }

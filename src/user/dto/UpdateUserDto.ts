@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEmail,
   IsIn,
   IsNotEmpty,
@@ -6,25 +7,27 @@ import {
   IsString,
 } from 'class-validator';
 import { USER_ROLES } from '../user-role';
-import { PASSWORD_RULES } from './password-rules';
 
-export class CreateUserDto {
-  @IsString({ message: 'Polje Ime je obavezno' })
+export class UpdateUserDto {
+  @IsOptional()
+  @IsString()
   @IsNotEmpty({ message: 'Polje Ime je obavezno' })
-  firstName: string;
+  firstName?: string;
 
-  @IsString({ message: 'Polje Prezime je obavezno' })
+  @IsOptional()
+  @IsString()
   @IsNotEmpty({ message: 'Polje Prezime je obavezno' })
-  lastName: string;
+  lastName?: string;
 
+  @IsOptional()
   @IsEmail({}, { message: 'Email adresa nije validna' })
-  email: string;
-
-  @IsString({ message: 'Polje Lozinka je obavezno' })
-  @PASSWORD_RULES
-  password: string;
+  email?: string;
 
   @IsOptional()
   @IsIn(USER_ROLES, { message: 'Uloga nije ispravna' })
   role?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

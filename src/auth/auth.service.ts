@@ -29,6 +29,15 @@ export class AuthService {
       throw new BadRequestException('Email ili lozinka nisu ispravni');
     }
 
+    if (!user.isActive) {
+      await this.recordFailedLogin(
+        userLoginDto.email,
+        ip,
+        'nalog je deaktiviran',
+      );
+      throw new BadRequestException('Email ili lozinka nisu ispravni');
+    }
+
     const payload = {
       sub: user.id,
       email: user.email,
@@ -59,13 +68,17 @@ export class AuthService {
   // The attempted address is stored as typed (the account may not exist), but
   // never the password. The actor is left empty so the entry is not mistaken
   // for something that account did.
-  private async recordFailedLogin(email: string, ip: string | null) {
+  private async recordFailedLogin(
+    email: string,
+    ip: string | null,
+    reason?: string,
+  ) {
     await this.auditService.record(
       { email: null, name: null, ip },
       {
         action: 'auth.login_failed',
         entityType: 'auth',
-        summary: `Neuspešna prijava za ${email.slice(0, 120)}`,
+        summary: `Neuspešna prijava za ${email.slice(0, 120)}${reason ? ` (${reason})` : ''}`,
         details: { email: email.slice(0, 120) },
       },
     );
