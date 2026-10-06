@@ -11,7 +11,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from 'src/auth/guards/auth.guard';
+import { isRealDate } from 'src/common/date.util';
 import { CreateReservationDto } from './dto/CreateReservationDto';
+import { ReservationFiltersDto } from './dto/ReservationFiltersDto';
 import { CronGuard } from './guards/cron.guard';
 import { ReservationsService } from './reservations.service';
 
@@ -34,6 +36,7 @@ export class ReservationsController {
     @Query('page') pageParam?: string,
     @Query('pageSize') pageSizeParam?: string,
     @Query('search') searchParam?: string,
+    @Query() filterParams: ReservationFiltersDto = {},
   ) {
     const page = Math.max(1, Number(pageParam) || 1);
     const pageSize = Math.min(
@@ -42,7 +45,29 @@ export class ReservationsController {
     );
     const search = searchParam?.trim() || null;
 
-    return this.reservationsService.getReservations(page, pageSize, search);
+    const { travelFrom, travelTo } = filterParams;
+
+    if (
+      (travelFrom && !isRealDate(travelFrom)) ||
+      (travelTo && !isRealDate(travelTo))
+    ) {
+      throw new BadRequestException('Datum nije ispravan');
+    }
+
+    if (travelFrom && travelTo && travelTo < travelFrom) {
+      throw new BadRequestException(
+        'Datum završetka ne može biti pre datuma početka',
+      );
+    }
+
+    return this.reservationsService.getReservations(page, pageSize, search, {
+      travelFrom: travelFrom || null,
+      travelTo: travelTo || null,
+      location: filterParams.location?.trim() || null,
+      time: filterParams.time || null,
+      duplicatesOnly: filterParams.duplicatesOnly === 'true',
+      sort: filterParams.sort ?? 'newest',
+    });
   }
 
   @UseGuards(AuthGuard)
