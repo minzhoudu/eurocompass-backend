@@ -9,6 +9,8 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
+import { CurrentActor } from 'src/auth/actor.decorator';
+import { Actor } from 'src/audit/audit.types';
 import { AuthGuard } from 'src/auth/guards/auth.guard';
 import { SaveNoticeDto } from './dto/SaveNoticeDto';
 import { NoticesService } from './notices.service';
@@ -31,8 +33,8 @@ export class NoticesController {
 
   @UseGuards(AuthGuard)
   @Post()
-  createNotice(@Body() dto: SaveNoticeDto) {
-    return this.noticesService.createNotice(dto);
+  createNotice(@Body() dto: SaveNoticeDto, @CurrentActor() actor: Actor) {
+    return this.noticesService.createNotice(dto, actor);
   }
 
   @UseGuards(AuthGuard)
@@ -40,13 +42,17 @@ export class NoticesController {
   updateNotice(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SaveNoticeDto,
+    @CurrentActor() actor: Actor,
   ) {
-    return this.noticesService.updateNotice(id, dto);
+    return this.noticesService.updateNotice(id, dto, actor);
   }
 
   @UseGuards(AuthGuard)
   @Delete(':id')
-  deleteNotice(@Param('id', ParseIntPipe) id: number) {
-    return this.noticesService.deleteNotice(id);
+  deleteNotice(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.noticesService.deleteNotice(id, actor);
   }
 }

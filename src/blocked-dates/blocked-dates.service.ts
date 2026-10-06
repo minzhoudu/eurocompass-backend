@@ -6,11 +6,30 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Actor } from 'src/audit/audit.types';
+import { AuditService } from 'src/audit/audit.service';
+import { diffFields, formatDay } from 'src/audit/audit.util';
 import { isRealDate } from 'src/common/date.util';
 import { SaveBlockedDateDto } from './dto/SaveBlockedDateDto';
 import { BlockedDate } from './models/BlockedDate';
 
 const TIMEZONE = 'Europe/Belgrade';
+const BLOCK_FIELDS = ['startsOn', 'endsOn', 'city', 'time', 'reason'] as const;
+
+// "01.05.2026 – 03.05.2026 · Kruševac · 06:00" style label for the audit summary.
+const describe = (block: {
+  startsOn: string;
+  endsOn: string;
+  city: string | null;
+  time: string | null;
+}) =>
+  [
+    block.startsOn === block.endsOn
+      ? formatDay(block.startsOn)
+      : `${formatDay(block.startsOn)} – ${formatDay(block.endsOn)}`,
+    block.city ?? 'svi gradovi',
+    block.time ?? 'svi polasci',
+  ].join(' · ');
 
 @Injectable()
 export class BlockedDatesService {
@@ -19,6 +38,7 @@ export class BlockedDatesService {
   constructor(
     @InjectRepository(BlockedDate)
     private blockedDateRepository: Repository<BlockedDate>,
+    private auditService: AuditService,
   ) {}
 
   // What the public booking form needs: blocks that have not ended yet
@@ -48,25 +68,67 @@ export class BlockedDatesService {
     });
   }
 
-  createBlockedDate(dto: SaveBlockedDateDto) {
-    return this.blockedDateRepository.save(this.toEntityValues(dto));
+  async createBlockedDate(dto: SaveBlockedDateDto, actor: Actor) {
+    const block = await this.blockedDateRepository.save(
+      this.toEntityValues(dto),
+    );
+
+    await this.auditService.record(actor, {
+      action: 'blocked_date.create',
+      entityType: 'blocked_date',
+      entityId: block.id,
+      summary: `Blokiran termin: ${describe(block)}`,
+      details: { snapshot: this.snapshot(block) },
+    });
+
+    return block;
   }
 
-  async updateBlockedDate(id: number, dto: SaveBlockedDateDto) {
+  async updateBlockedDate(id: number, dto: SaveBlockedDateDto, actor: Actor) {
     const blockedDate = await this.blockedDateRepository.findOne({
       where: { id },
     });
 
     if (!blockedDate) throw new NotFoundException('Blokada nije pronađena');
 
-    return this.blockedDateRepository.save({
+    const values = this.toEntityValues(dto);
+    const changes = diffFields(blockedDate, values, BLOCK_FIELDS);
+    const updated = await this.blockedDateRepository.save({
       ...blockedDate,
-      ...this.toEntityValues(dto),
+      ...values,
     });
+
+    if (Object.keys(changes).length > 0) {
+      await this.auditService.record(actor, {
+        action: 'blocked_date.update',
+        entityType: 'blocked_date',
+        entityId: id,
+        summary: `Izmenjena blokada: ${describe(updated)}`,
+        details: { changes },
+      });
+    }
+
+    return updated;
   }
 
-  async deleteBlockedDate(id: number) {
+  async deleteBlockedDate(id: number, actor: Actor) {
+    const block = await this.blockedDateRepository.findOne({ where: { id } });
+
     await this.blockedDateRepository.delete({ id });
+
+    if (block) {
+      await this.auditService.record(actor, {
+        action: 'blocked_date.delete',
+        entityType: 'blocked_date',
+        entityId: id,
+        summary: `Uklonjena blokada: ${describe(block)}`,
+        details: { snapshot: this.snapshot(block) },
+      });
+    }
+  }
+
+  private snapshot(block: BlockedDate) {
+    return Object.fromEntries(BLOCK_FIELDS.map((f) => [f, block[f]]));
   }
 
   // Final say on a booking: throws if a block covers this day, city and

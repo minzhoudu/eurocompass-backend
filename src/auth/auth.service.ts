@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { AuditService } from 'src/audit/audit.service';
 import { UserService } from 'src/user/user.service';
 import { UserLoginDto } from './dto/user-login.dto';
 
@@ -8,11 +9,13 @@ export class AuthService {
   constructor(
     private userService: UserService,
     private jwtService: JwtService,
+    private auditService: AuditService,
   ) {}
 
-  async login(userLoginDto: UserLoginDto) {
+  async login(userLoginDto: UserLoginDto, ip: string | null) {
     const user = await this.userService.getUserByEmail(userLoginDto.email);
     if (!user) {
+      await this.recordFailedLogin(userLoginDto.email, ip);
       throw new BadRequestException('Email ili lozinka nisu ispravni');
     }
 
@@ -22,6 +25,7 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
+      await this.recordFailedLogin(userLoginDto.email, ip);
       throw new BadRequestException('Email ili lozinka nisu ispravni');
     }
 
@@ -36,6 +40,34 @@ export class AuthService {
 
     await this.userService.updateLastLogin(user);
 
+    await this.auditService.record(
+      {
+        email: user.email,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        ip,
+      },
+      {
+        action: 'auth.login',
+        entityType: 'auth',
+        summary: 'Prijava u admin panel',
+      },
+    );
+
     return jwt;
+  }
+
+  // The attempted address is stored as typed (the account may not exist), but
+  // never the password. The actor is left empty so the entry is not mistaken
+  // for something that account did.
+  private async recordFailedLogin(email: string, ip: string | null) {
+    await this.auditService.record(
+      { email: null, name: null, ip },
+      {
+        action: 'auth.login_failed',
+        entityType: 'auth',
+        summary: `Neuspešna prijava za ${email.slice(0, 120)}`,
+        details: { email: email.slice(0, 120) },
+      },
+    );
   }
 }

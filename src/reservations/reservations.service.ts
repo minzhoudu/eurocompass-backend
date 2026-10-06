@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
+import { Actor, SYSTEM_ACTOR } from 'src/audit/audit.types';
+import { AuditService } from 'src/audit/audit.service';
+import { clip, formatDay } from 'src/audit/audit.util';
 import { isRealDate } from 'src/common/date.util';
 import { BlockedDatesService } from 'src/blocked-dates/blocked-dates.service';
 import { CreateReservationDto } from './dto/CreateReservationDto';
@@ -97,6 +100,7 @@ export class ReservationsService {
     @InjectRepository(Reservation)
     private reservationRepository: Repository<Reservation>,
     private blockedDatesService: BlockedDatesService,
+    private auditService: AuditService,
   ) {}
 
   async createReservation(dto: CreateReservationDto) {
@@ -211,6 +215,7 @@ export class ReservationsService {
   async exportReservationsCsv(
     search: string | null,
     filters: ReservationFilters,
+    actor: Actor,
   ) {
     const { items } = await this.findReservations(
       search,
@@ -218,6 +223,14 @@ export class ReservationsService {
       MAX_EXPORT_ROWS,
       0,
     );
+
+    // Passenger data leaves the system here, so it is always recorded.
+    await this.auditService.record(actor, {
+      action: 'reservation.export',
+      entityType: 'reservation',
+      summary: `Izvezeno ${items.length} rezervacija (CSV)`,
+      details: { count: items.length, search, filters },
+    });
 
     return buildReservationsCsv(items);
   }
@@ -444,8 +457,32 @@ export class ReservationsService {
     };
   }
 
-  async deleteReservation(id: number) {
+  async deleteReservation(id: number, actor: Actor) {
+    const reservation = await this.reservationRepository.findOne({
+      where: { id },
+    });
+
     await this.reservationRepository.delete({ id });
+
+    if (reservation) {
+      // Contact details are left out on purpose: the log should not outlive
+      // the passenger data it describes.
+      await this.auditService.record(actor, {
+        action: 'reservation.delete',
+        entityType: 'reservation',
+        entityId: id,
+        summary: `Obrisana rezervacija: ${clip(reservation.fullName, 40)}, ${formatDay(reservation.travelDate)} ${reservation.travelTime}, ${reservation.startingLocation}`,
+        details: {
+          snapshot: {
+            fullName: reservation.fullName,
+            startingLocation: reservation.startingLocation,
+            travelDate: reservation.travelDate,
+            travelTime: reservation.travelTime,
+            numberOfTickets: reservation.numberOfTickets,
+          },
+        },
+      });
+    }
   }
 
   async cleanupOldReservations() {
@@ -456,11 +493,21 @@ export class ReservationsService {
       createdAt: LessThan(cutoff),
     });
     const deletedCount = result.affected ?? 0;
+    const prunedAuditEntries = await this.auditService.deleteExpired();
+
+    if (deletedCount > 0) {
+      await this.auditService.record(SYSTEM_ACTOR, {
+        action: 'reservation.cleanup',
+        entityType: 'reservation',
+        summary: `Automatski obrisano ${deletedCount} starih rezervacija`,
+        details: { deletedCount, olderThan: cutoff.toISOString() },
+      });
+    }
 
     this.logger.log(
       `Reservation cleanup ran: deleted ${deletedCount} reservation(s) created before ${cutoff.toISOString()}`,
     );
 
-    return { deletedCount };
+    return { deletedCount, prunedAuditEntries };
   }
 }
