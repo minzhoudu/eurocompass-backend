@@ -8,18 +8,50 @@ import {
   ParseIntPipe,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { AuthGuard } from 'src/auth/guards/auth.guard';
 import { isRealDate } from 'src/common/date.util';
 import { CreateReservationDto } from './dto/CreateReservationDto';
 import { ReservationFiltersDto } from './dto/ReservationFiltersDto';
 import { CronGuard } from './guards/cron.guard';
-import { ReservationsService } from './reservations.service';
+import {
+  ReservationFilters,
+  ReservationsService,
+} from './reservations.service';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
+
+// Validates the optional list filters and fills in the defaults.
+const parseFilters = (params: ReservationFiltersDto): ReservationFilters => {
+  const { travelFrom, travelTo } = params;
+
+  if (
+    (travelFrom && !isRealDate(travelFrom)) ||
+    (travelTo && !isRealDate(travelTo))
+  ) {
+    throw new BadRequestException('Datum nije ispravan');
+  }
+
+  if (travelFrom && travelTo && travelTo < travelFrom) {
+    throw new BadRequestException(
+      'Datum završetka ne može biti pre datuma početka',
+    );
+  }
+
+  return {
+    travelFrom: travelFrom || null,
+    travelTo: travelTo || null,
+    location: params.location?.trim() || null,
+    time: params.time || null,
+    duplicatesOnly: params.duplicatesOnly === 'true',
+    sort: params.sort ?? 'newest',
+  };
+};
 
 @Controller('reservations')
 export class ReservationsController {
@@ -45,29 +77,35 @@ export class ReservationsController {
     );
     const search = searchParam?.trim() || null;
 
-    const { travelFrom, travelTo } = filterParams;
+    return this.reservationsService.getReservations(
+      page,
+      pageSize,
+      search,
+      parseFilters(filterParams),
+    );
+  }
 
-    if (
-      (travelFrom && !isRealDate(travelFrom)) ||
-      (travelTo && !isRealDate(travelTo))
-    ) {
-      throw new BadRequestException('Datum nije ispravan');
-    }
+  // Same search and filters as the list, but every matching row as a CSV
+  // (sent as a download; the admin app fetches it with its auth header).
+  @UseGuards(AuthGuard)
+  @Get('export')
+  async exportReservations(
+    @Res({ passthrough: true }) res: Response,
+    @Query('search') searchParam?: string,
+    @Query() filterParams: ReservationFiltersDto = {},
+  ) {
+    const csv = await this.reservationsService.exportReservationsCsv(
+      searchParam?.trim() || null,
+      parseFilters(filterParams),
+    );
 
-    if (travelFrom && travelTo && travelTo < travelFrom) {
-      throw new BadRequestException(
-        'Datum završetka ne može biti pre datuma početka',
-      );
-    }
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="rezervacije-${new Date().toISOString().slice(0, 10)}.csv"`,
+    );
 
-    return this.reservationsService.getReservations(page, pageSize, search, {
-      travelFrom: travelFrom || null,
-      travelTo: travelTo || null,
-      location: filterParams.location?.trim() || null,
-      time: filterParams.time || null,
-      duplicatesOnly: filterParams.duplicatesOnly === 'true',
-      sort: filterParams.sort ?? 'newest',
-    });
+    return csv;
   }
 
   @UseGuards(AuthGuard)
