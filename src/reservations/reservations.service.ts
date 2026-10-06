@@ -1,6 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
+import { isRealDate } from 'src/common/date.util';
 import { BlockedDatesService } from 'src/blocked-dates/blocked-dates.service';
 import { CreateReservationDto } from './dto/CreateReservationDto';
 import { ReservationSort } from './dto/ReservationFiltersDto';
@@ -67,6 +74,15 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const dayToMs = (day: string) => Date.parse(`${day}T00:00:00Z`);
 const msToDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
+// A person needs several seconds to pick a station, a date and a time.
+const MIN_FILL_TIME_MS = 3000;
+// How many bookings one email / phone number / everyone together may create.
+// Generous for a real customer or a travel agent, far below a flood.
+const MAX_PER_EMAIL_PER_HOUR = 10;
+const MAX_PER_PHONE_PER_HOUR = 15;
+const MAX_ALL_PER_10_MINUTES = 300;
+const MAX_DAYS_AHEAD = 400;
+
 // Reservations are kept for a year, so this is far above a real export.
 const MAX_EXPORT_ROWS = 20000;
 
@@ -84,6 +100,20 @@ export class ReservationsService {
   ) {}
 
   async createReservation(dto: CreateReservationDto) {
+    // Bot traps: answered like a success so a script learns nothing, but
+    // nothing is saved.
+    if (
+      dto.hp ||
+      (dto.elapsedMs !== undefined && dto.elapsedMs < MIN_FILL_TIME_MS)
+    ) {
+      this.logger.warn('Reservation dropped by bot check');
+
+      return { id: 0 };
+    }
+
+    this.assertSensibleTravelDate(dto.travelDate);
+    await this.assertWithinRateLimits(dto);
+
     await this.blockedDatesService.assertNotBlocked(
       dto.travelDate,
       dto.startingLocation,
@@ -94,6 +124,70 @@ export class ReservationsService {
       ...dto,
       note: dto.note ?? null,
     });
+  }
+
+  // Rejects a date that is not a real day, is long past, or is further ahead
+  // than reservations are kept for. (Yesterday is allowed: Belgrade is ahead of
+  // UTC and a page may have been open over midnight.)
+  private assertSensibleTravelDate(travelDate: string) {
+    const day = travelDate.slice(0, 10);
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TIMEZONE,
+    }).format(new Date());
+    const shift = (days: number) =>
+      new Date(Date.parse(`${today}T00:00:00Z`) + days * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+
+    if (!isRealDate(day) || day < shift(-1) || day > shift(MAX_DAYS_AHEAD)) {
+      throw new BadRequestException('Datum polaska nije ispravan.');
+    }
+  }
+
+  // Counted from the table itself (no IP needed, which is unreliable behind a
+  // hosting proxy), so it also holds across restarts.
+  private async assertWithinRateLimits(dto: CreateReservationDto) {
+    const email = dto.email.trim().toLowerCase();
+    // Digits only, with the Serbian country code folded into the leading 0, so
+    // "+381 63 123 456", "00381631 23456" and "063/123-456" count as one number.
+    const phoneDigits = dto.phone.replace(/\D/g, '').replace(/^(00)?381/, '0');
+
+    const [byEmail, byPhone, overall] = await Promise.all([
+      this.reservationRepository
+        .createQueryBuilder('r')
+        .where('lower(trim(r.email)) = :email', { email })
+        .andWhere("r.createdAt > now() - interval '1 hour'")
+        .getCount(),
+      phoneDigits.length >= 6
+        ? this.reservationRepository
+            .createQueryBuilder('r')
+            .where(
+              "regexp_replace(regexp_replace(r.phone, '\\D', '', 'g'), '^(00)?381', '0') = :phoneDigits",
+              { phoneDigits },
+            )
+            .andWhere("r.createdAt > now() - interval '1 hour'")
+            .getCount()
+        : Promise.resolve(0),
+      this.reservationRepository
+        .createQueryBuilder('r')
+        .where("r.createdAt > now() - interval '10 minutes'")
+        .getCount(),
+    ]);
+
+    if (
+      byEmail >= MAX_PER_EMAIL_PER_HOUR ||
+      byPhone >= MAX_PER_PHONE_PER_HOUR ||
+      overall >= MAX_ALL_PER_10_MINUTES
+    ) {
+      this.logger.warn(
+        `Reservation rate limit hit (email ${byEmail}, phone ${byPhone}, all ${overall})`,
+      );
+
+      throw new HttpException(
+        'Previše rezervacija za kratko vreme. Pokušajte ponovo kasnije.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
   }
 
   async getReservations(
