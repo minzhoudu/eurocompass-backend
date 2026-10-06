@@ -23,6 +23,8 @@ import {
 } from './reservations.service';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+// Keeps the grouped queries cheap; reservations are only retained for a year.
+const MAX_ANALYTICS_DAYS = 366;
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
 
@@ -121,6 +123,30 @@ export class ReservationsController {
     }
 
     return this.reservationsService.getReservationsByTravelDate(date);
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('analytics')
+  getAnalytics(@Query('from') from?: string, @Query('to') to?: string) {
+    if (!from || !to || !isRealDate(from) || !isRealDate(to)) {
+      throw new BadRequestException('Datumi moraju biti u formatu YYYY-MM-DD');
+    }
+
+    if (to < from) {
+      throw new BadRequestException(
+        'Datum završetka ne može biti pre datuma početka',
+      );
+    }
+
+    const days = (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1;
+
+    if (days > MAX_ANALYTICS_DAYS) {
+      throw new BadRequestException(
+        `Period ne može biti duži od ${MAX_ANALYTICS_DAYS} dana`,
+      );
+    }
+
+    return this.reservationsService.getAnalytics(from, to);
   }
 
   @UseGuards(AuthGuard)
