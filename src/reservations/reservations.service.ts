@@ -4,6 +4,7 @@ import { LessThan, Repository } from 'typeorm';
 import { CreateReservationDto } from './dto/CreateReservationDto';
 import { ReservationSort } from './dto/ReservationFiltersDto';
 import { Reservation } from './models/Reservation';
+import { buildReservationsCsv } from './reservations-csv.util';
 
 type PeriodStats = {
   count: number;
@@ -37,9 +38,14 @@ export type ReservationFilters = {
 // the query. `id` keeps paging stable when the sort key ties.
 const ORDER_BY: Record<ReservationSort, string> = {
   newest: 'created_at desc, id desc',
-  travel_asc: 'travel_date asc, travel_time asc, id asc',
-  travel_desc: 'travel_date desc, travel_time desc, id desc',
+  // Same departure (date + time) is grouped by station, then by booking order.
+  travel_asc: 'travel_date asc, travel_time asc, starting_location asc, id asc',
+  travel_desc:
+    'travel_date desc, travel_time desc, starting_location asc, id desc',
 };
+
+// Reservations are kept for a year, so this is far above a real export.
+const MAX_EXPORT_ROWS = 20000;
 
 const RETENTION_YEARS = 1;
 const TIMEZONE = 'Europe/Belgrade';
@@ -66,6 +72,41 @@ export class ReservationsService {
     search: string | null,
     filters: ReservationFilters,
   ): Promise<PaginatedReservations> {
+    const { items, total } = await this.findReservations(
+      search,
+      filters,
+      pageSize,
+      (page - 1) * pageSize,
+    );
+
+    return { items, total, page, pageSize };
+  }
+
+  // Every reservation matching the search and filters (not just one page), as
+  // a CSV the admin can open in a spreadsheet.
+  async exportReservationsCsv(
+    search: string | null,
+    filters: ReservationFilters,
+  ) {
+    const { items } = await this.findReservations(
+      search,
+      filters,
+      MAX_EXPORT_ROWS,
+      0,
+    );
+
+    return buildReservationsCsv(items);
+  }
+
+  private async findReservations(
+    search: string | null,
+    filters: ReservationFilters,
+    limit: number,
+    offset: number,
+  ): Promise<{
+    items: (Reservation & { isDuplicateTrip: boolean })[];
+    total: number;
+  }> {
     // The duplicate-trip flag is computed over the ENTIRE table (not just the
     // current page/search results), so it stays correct even when a matching
     // pair of bookings lands on two different pages.
@@ -83,8 +124,6 @@ export class ReservationsService {
       is_duplicate_trip: boolean;
       total_count: string;
     };
-
-    const offset = (page - 1) * pageSize;
 
     const rows = (await this.reservationRepository.query(
       `
@@ -138,7 +177,7 @@ export class ReservationsService {
       `,
       [
         search,
-        pageSize,
+        limit,
         offset,
         filters.travelFrom,
         filters.travelTo,
@@ -164,7 +203,7 @@ export class ReservationsService {
 
     const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
 
-    return { items, total, page, pageSize };
+    return { items, total };
   }
 
   // Every booking for one travel day, ordered by departure time, so the admin
