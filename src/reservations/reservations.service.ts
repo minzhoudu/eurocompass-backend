@@ -45,6 +45,28 @@ const ORDER_BY: Record<ReservationSort, string> = {
     'travel_date desc, travel_time desc, starting_location asc, id desc',
 };
 
+export type ReservationAnalytics = {
+  range: { from: string; to: string };
+  // The period of the same length that ends the day before `range` starts.
+  previousRange: { from: string; to: string };
+  totals: { bookings: number; seats: number };
+  previousTotals: { bookings: number; seats: number };
+  byDay: { date: string; city: string; bookings: number; seats: number }[];
+  byDeparture: {
+    city: string;
+    time: string;
+    bookings: number;
+    seats: number;
+  }[];
+  byStation: { location: string; bookings: number; seats: number }[];
+  // 1 = Monday ... 7 = Sunday (ISO).
+  byWeekday: { weekday: number; bookings: number; seats: number }[];
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const dayToMs = (day: string) => Date.parse(`${day}T00:00:00Z`);
+const msToDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
 // Reservations are kept for a year, so this is far above a real export.
 const MAX_EXPORT_ROWS = 20000;
 
@@ -265,6 +287,67 @@ export class ReservationsService {
     ) as ReservationStats;
 
     return stats;
+  }
+
+  // Booking statistics for a travel-date range (inclusive), plus the totals of
+  // the previous period of the same length for comparison. Everything is
+  // grouped by TRAVEL date - when the passengers ride, not when they booked.
+  async getAnalytics(from: string, to: string): Promise<ReservationAnalytics> {
+    const lengthDays = (dayToMs(to) - dayToMs(from)) / DAY_MS + 1;
+    const previousTo = msToDay(dayToMs(from) - DAY_MS);
+    const previousFrom = msToDay(
+      dayToMs(previousTo) - (lengthDays - 1) * DAY_MS,
+    );
+
+    type Count = { bookings: number; seats: number };
+    const inRange = 'where travel_date between $1::date and $2::date';
+    const params = [from, to];
+    const city = "split_part(starting_location, ' - ', 1)";
+    const counts =
+      'count(*)::int as bookings, coalesce(sum(number_of_tickets), 0)::int as seats';
+
+    const [totals, previousTotals, byDay, byDeparture, byStation, byWeekday] =
+      await Promise.all([
+        this.reservationRepository.query(
+          `select ${counts} from reservations ${inRange}`,
+          params,
+        ) as Promise<Count[]>,
+        this.reservationRepository.query(
+          `select ${counts} from reservations ${inRange}`,
+          [previousFrom, previousTo],
+        ) as Promise<Count[]>,
+        this.reservationRepository.query(
+          `select travel_date::text as date, ${city} as city, ${counts}
+           from reservations ${inRange} group by 1, 2 order by 1, 2`,
+          params,
+        ) as Promise<ReservationAnalytics['byDay']>,
+        this.reservationRepository.query(
+          `select ${city} as city, travel_time as time, ${counts}
+           from reservations ${inRange} group by 1, 2 order by 1, 2`,
+          params,
+        ) as Promise<ReservationAnalytics['byDeparture']>,
+        this.reservationRepository.query(
+          `select starting_location as location, ${counts}
+           from reservations ${inRange} group by 1 order by 1`,
+          params,
+        ) as Promise<ReservationAnalytics['byStation']>,
+        this.reservationRepository.query(
+          `select extract(isodow from travel_date)::int as weekday, ${counts}
+           from reservations ${inRange} group by 1 order by 1`,
+          params,
+        ) as Promise<ReservationAnalytics['byWeekday']>,
+      ]);
+
+    return {
+      range: { from, to },
+      previousRange: { from: previousFrom, to: previousTo },
+      totals: totals[0],
+      previousTotals: previousTotals[0],
+      byDay,
+      byDeparture,
+      byStation,
+      byWeekday,
+    };
   }
 
   async deleteReservation(id: number) {
