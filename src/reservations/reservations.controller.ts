@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -14,6 +15,7 @@ import { CreateReservationDto } from './dto/CreateReservationDto';
 import { CronGuard } from './guards/cron.guard';
 import { ReservationsService } from './reservations.service';
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
 
@@ -41,6 +43,21 @@ export class ReservationsController {
     const search = searchParam?.trim() || null;
 
     return this.reservationsService.getReservations(page, pageSize, search);
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('by-date')
+  getReservationsByDate(@Query('date') date?: string) {
+    const isValidDate =
+      !!date &&
+      DATE_PATTERN.test(date) &&
+      !Number.isNaN(new Date(`${date}T00:00:00Z`).getTime());
+
+    if (!isValidDate) {
+      throw new BadRequestException('Datum mora biti u formatu YYYY-MM-DD');
+    }
+
+    return this.reservationsService.getReservationsByTravelDate(date);
   }
 
   @UseGuards(AuthGuard)

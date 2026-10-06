@@ -132,6 +132,16 @@ export class ReservationsService {
     return { items, total, page, pageSize };
   }
 
+  // Every booking for one travel day, ordered by departure time, so the admin
+  // can see who is on which departure. `travelDate` is a `date` column, which
+  // TypeORM's find() returns as a plain "YYYY-MM-DD" string.
+  getReservationsByTravelDate(travelDate: string) {
+    return this.reservationRepository.find({
+      where: { travelDate },
+      order: { travelTime: 'ASC', createdAt: 'ASC' },
+    });
+  }
+
   async getStats(): Promise<ReservationStats> {
     // Bucketed in Europe/Belgrade local time, not UTC, so "today" lines up
     // with the actual business day rather than rolling over at 1-2am local.
