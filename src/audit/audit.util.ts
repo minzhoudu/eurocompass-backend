@@ -21,6 +21,13 @@ export const diffFields = <T extends object>(
   return changes;
 };
 
+// "2026-10-20" -> "20.10.2026" for the Serbian summaries.
+export const formatDay = (day: string) => {
+  const [year, month, date] = day.split('-');
+
+  return `${date}.${month}.${year}`;
+};
+
 // Free text goes into a one-line summary; keep it short.
 export const clip = (text: string | null | undefined, max = 80) => {
   const oneLine = (text ?? '').replace(/\s+/g, ' ').trim();

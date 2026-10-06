@@ -9,7 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { Actor, SYSTEM_ACTOR } from 'src/audit/audit.types';
 import { AuditService } from 'src/audit/audit.service';
-import { clip } from 'src/audit/audit.util';
+import { clip, formatDay } from 'src/audit/audit.util';
 import { isRealDate } from 'src/common/date.util';
 import { BlockedDatesService } from 'src/blocked-dates/blocked-dates.service';
 import { CreateReservationDto } from './dto/CreateReservationDto';
@@ -471,7 +471,7 @@ export class ReservationsService {
         action: 'reservation.delete',
         entityType: 'reservation',
         entityId: id,
-        summary: `Obrisana rezervacija: ${clip(reservation.fullName, 40)}, ${reservation.travelDate} ${reservation.travelTime}, ${reservation.startingLocation}`,
+        summary: `Obrisana rezervacija: ${clip(reservation.fullName, 40)}, ${formatDay(reservation.travelDate)} ${reservation.travelTime}, ${reservation.startingLocation}`,
         details: {
           snapshot: {
             fullName: reservation.fullName,

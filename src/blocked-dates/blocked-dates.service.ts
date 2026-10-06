@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Actor } from 'src/audit/audit.types';
 import { AuditService } from 'src/audit/audit.service';
-import { diffFields } from 'src/audit/audit.util';
+import { diffFields, formatDay } from 'src/audit/audit.util';
 import { isRealDate } from 'src/common/date.util';
 import { SaveBlockedDateDto } from './dto/SaveBlockedDateDto';
 import { BlockedDate } from './models/BlockedDate';
@@ -16,7 +16,7 @@ import { BlockedDate } from './models/BlockedDate';
 const TIMEZONE = 'Europe/Belgrade';
 const BLOCK_FIELDS = ['startsOn', 'endsOn', 'city', 'time', 'reason'] as const;
 
-// "1. 5. – 3. 5. · Kruševac · 06:00" style label for the audit summary.
+// "01.05.2026 – 03.05.2026 · Kruševac · 06:00" style label for the audit summary.
 const describe = (block: {
   startsOn: string;
   endsOn: string;
@@ -25,8 +25,8 @@ const describe = (block: {
 }) =>
   [
     block.startsOn === block.endsOn
-      ? block.startsOn
-      : `${block.startsOn} – ${block.endsOn}`,
+      ? formatDay(block.startsOn)
+      : `${formatDay(block.startsOn)} – ${formatDay(block.endsOn)}`,
     block.city ?? 'svi gradovi',
     block.time ?? 'svi polasci',
   ].join(' · ');
