@@ -9,9 +9,6 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { CurrentActor } from 'src/auth/actor.decorator';
-import { Actor } from 'src/audit/audit.types';
-import { clip, formatEntryCount } from './audit.util';
 import { AuthGuard } from 'src/auth/guards/auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/roles.decorator';
@@ -64,13 +61,12 @@ export class AuditController {
   }
 
   // Owner-only clean-up of the history: `?olderThanDays=90` removes entries
-  // older than that, `?all=true` removes everything. The removal itself is
-  // then written as a new entry, so it can't happen unnoticed.
+  // older than that, `?all=true` removes everything. Deleting is itself not
+  // recorded (only owners can do it, and they decide what the history keeps).
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('owner')
   @Delete()
   async deleteEntries(
-    @CurrentActor() actor: Actor,
     @Query('olderThanDays') olderThanDaysParam?: string,
     @Query('all') allParam?: string,
   ) {
@@ -96,50 +92,18 @@ export class AuditController {
 
     const deletedCount = await this.auditService.deleteEntries(olderThanDays);
 
-    if (deletedCount > 0) {
-      await this.auditService.record(actor, {
-        action: 'audit.cleanup',
-        entityType: 'audit',
-        summary: `Obrisano ${formatEntryCount(deletedCount)} iz istorije izmena (${
-          olderThanDays === null
-            ? 'svi zapisi'
-            : `starije od ${olderThanDays} dana`
-        })`,
-        details: { deletedCount, olderThanDays },
-      });
-    }
-
     return { deletedCount };
   }
 
-  // Removes one entry. What was removed (its text, who did it and when) is
-  // copied into a new entry, so deleting never leaves no trace.
+  // Removes one entry (not recorded, like the bulk clean-up above).
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('owner')
   @Delete(':id')
-  async deleteEntry(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentActor() actor: Actor,
-  ) {
+  async deleteEntry(@Param('id', ParseIntPipe) id: number) {
     const entry = await this.auditService.getEntry(id);
 
     if (!entry) throw new NotFoundException('Zapis nije pronađen');
 
     await this.auditService.deleteEntry(id);
-
-    const entryTime = entry.createdAt.toLocaleString('sr-RS', {
-      timeZone: 'Europe/Belgrade',
-    });
-    const entryActor = entry.actorName || entry.actorEmail || 'sistem';
-
-    await this.auditService.record(actor, {
-      action: 'audit.delete_entry',
-      entityType: 'audit',
-      entityId: id,
-      summary: `Obrisan zapis iz istorije izmena: „${clip(entry.summary, 120)}“ (${entryTime}, ${entryActor})`,
-      details: {
-        snapshot: { entrySummary: entry.summary, entryActor, entryTime },
-      },
-    });
   }
 }
